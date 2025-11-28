@@ -1,0 +1,110 @@
+name: Auto Version Bump
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  bump-version:
+    if: github.event.pull_request.merged == true
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Determine version bump type
+        id: bump-type
+        shell: pwsh
+        run: |
+          $prTitle = "${{ github.event.pull_request.title }}"
+          $labels = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
+          Write-Host "PR Title: $prTitle"
+          Write-Host "Labels: $labels"
+          
+          if ($labels -match "major") {
+            "type=major" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Version bump: major (from label)"
+          } elseif ($prTitle -match "^feat(\(.+\))?:") {
+            "type=minor" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Version bump: minor (from feat: prefix)"
+          } elseif ($prTitle -match "^fix(\(.+\))?:") {
+            "type=patch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Version bump: patch (from fix: prefix)"
+          } else {
+            "type=patch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Version bump: patch (default)"
+          }
+      
+      - name: Read current version
+        id: current-version
+        shell: pwsh
+        run: |
+          $content = Get-Content version.yml -Raw
+          $major = [regex]::Match($content, 'major:\s*(\d+)').Groups[1].Value
+          $minor = [regex]::Match($content, 'minor:\s*(\d+)').Groups[1].Value
+          $patch = [regex]::Match($content, 'patch:\s*(\d+)').Groups[1].Value
+          
+          "major=$major" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "minor=$minor" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "patch=$patch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Current version: $major.$minor.$patch"
+      
+      - name: Calculate new version
+        id: new-version
+        shell: pwsh
+        run: |
+          $major = [int]"${{ steps.current-version.outputs.major }}"
+          $minor = [int]"${{ steps.current-version.outputs.minor }}"
+          $patch = [int]"${{ steps.current-version.outputs.patch }}"
+          $bumpType = "${{ steps.bump-type.outputs.type }}"
+          
+          if ($bumpType -eq "major") {
+            $major++
+            $minor = 0
+            $patch = 0
+          } elseif ($bumpType -eq "minor") {
+            $minor++
+            $patch = 0
+          } else {
+            $patch++
+          }
+          
+          "major=$major" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "minor=$minor" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "patch=$patch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "New version: $major.$minor.$patch (bump type: $bumpType)"
+      
+      - name: Update version file
+        shell: pwsh
+        run: |
+          $content = @"
+          {
+            major: ${{ steps.new-version.outputs.major }},
+            minor: ${{ steps.new-version.outputs.minor }},
+            patch: ${{ steps.new-version.outputs.patch }}
+          }
+          "@
+          
+          Set-Content -Path version.yml -Value $content
+          Get-Content version.yml
+      
+      - name: Commit and push version bump
+        shell: pwsh
+        run: |
+          git add version.yml
+          $newVersion = "${{ steps.new-version.outputs.major }}.${{ steps.new-version.outputs.minor }}.${{ steps.new-version.outputs.patch }}"
+          git commit -m "chore: bump version to $newVersion [skip ci]"
+          git push origin main
