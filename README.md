@@ -1,3 +1,5 @@
+[![Run Tests](https://github.com/lee-optiseis/version_test/actions/workflows/test.yml/badge.svg)](https://github.com/lee-optiseis/version_test/actions/workflows/test.yml)
+
 # Version Test
 
 A repository demonstrating automated semantic versioning based on pull request conventions.
