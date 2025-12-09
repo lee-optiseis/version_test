@@ -5,7 +5,6 @@
 A repository demonstrating automated semantic versioning based on pull request conventions.
 
 ## Overview
-
 This project uses automated version bumping to manage releases. The version is stored in `version.yml` and automatically updated based on PR titles and labels following semantic versioning principles.
 
 ## How Version Bumping Works
